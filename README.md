@@ -7,15 +7,21 @@
 
 - Instale a virtual environement.
 
-```python -m venv env```
+```
+python -m venv env
+```
 
 - Entre na virtural environment.
 
-```env/Scripts/activated```
+```
+env/Scripts/activated
+```
 
 - Instale os pacotes requeridos no arquivo requirements.txt.
 
-```pip install -r requirements.txt```
+```
+pip install -r requirements.txt
+```
 
 ## Linguagens de Desenvolvimento
 
