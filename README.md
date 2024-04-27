@@ -25,6 +25,12 @@ pip install -r requirements.txt
 
 ## Rodando Codigo do Tensorflow na GPU
 
+- WSL ja vem com o cuda pre instalado, mas instale por completo.
+
+```
+sudo apt install nvidia-cuda-toolkit
+```
+
 - No WSL2 em uma distro linux baixe o tensorflow cuda.
 
 ```
