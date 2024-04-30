@@ -25,10 +25,29 @@ pip install -r requirements.txt
 
 ## Rodando Codigo do Tensorflow na GPU
 
-- WSL ja vem com o cuda pre instalado, mas instale por completo.
+- Verifique a versão do tensorflow e do cuda necessárias [https://www.tensorflow.org/install/source?hl=pt-br#tested_build_configurations](https://www.tensorflow.org/install/source?hl=pt-br#tested_build_configurations)
+
+- Instale o CUDA, acessando o site da nvidia [https://developer.nvidia.com/cuda-toolkit-archive](https://developer.nvidia.com/cuda-toolkit-archive).
+
+
+- Rode os comando no runfile(local)
+```
+wget https://developer.download.nvidia.com/compute/cuda/12.4.1/local_installers/cuda_12.4.1_550.54.15_linux.run
+sudo sh cuda_12.4.1_550.54.15_linux.run
+```
+
+- Crie as variaveis de ambiente
+```
+nano ~/.bashrc
+export PATH=$PATH:/urs/local/cuda/12.4/bin
+export LD_LIBRARY_PATH=/urs/local/cuda-12.4/lib
+source ~/.bashrc
+```
+
+- Verifique se o cuda foi instalado no WSL2
 
 ```
-sudo apt install nvidia-cuda-toolkit
+nvcc -V
 ```
 
 - No WSL2 em uma distro linux baixe o tensorflow cuda.
@@ -40,12 +59,7 @@ pip install tensorflow[and-cuda]
 - Verifique a versão do Cuda instalada por default no WSL2
 ```
 nvidia-smi
-watch -n 1 nvidia-smi
-```
-
-- Caso seja preciso instalar outra versão do Cuda por cima, tem que verificar pelo seguinte comando
-```
-nvcc -V
+watch -n 0.1 nvidia-smi
 ```
 
 - Na versão 2.16.1 (26/04/2024) ele está bugada não reconhecendo a GPU, porém é a unica versão possivel de rodar transformer, então rode os seguintes codigos.

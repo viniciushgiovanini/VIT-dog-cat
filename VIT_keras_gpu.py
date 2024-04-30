@@ -7,17 +7,23 @@ import os
 from PIL import Image
 import math
 import tensorflow as tf
+import time
+
+start_time = time.time()
 
 print("\n\n\n")
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 print("\n\n\n")
+
+
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir='./data/logs/', histogram_freq = 1, profile_batch='250,350')
 
 # Hyperparameters
 
 learning_rate = 0.001
 weight_decay = 0.0001
 batch_size = 32
-num_epochs = 200  # For real training, use num_epochs=100. 10 is a test value
+num_epochs = 4  # For real training, use num_epochs=100. 10 is a test value
 image_size = 200  # We'll resize input images to this size
 patch_size = 16  # Size of the patches to be extract from the input images
 num_patches = (image_size // patch_size) ** 2
@@ -62,50 +68,6 @@ print("Classes de teste:", test_generator.class_indices)
 
 
 num_classes = len(train_generator.class_indices)
-
-# Transform data
-
-x_train = []
-y_train = []
-x_test = []
-y_test = []
-
-for i in range(len(train_generator)):
-    x_batch, y_batch = train_generator[i]
-    x_train.append(x_batch)
-    y_train.append(y_batch)
-
-x_train = np.concatenate(x_train)
-y_train = np.concatenate(y_train)
-
-for i in range(len(test_generator)):
-    x_batch, y_batch = test_generator[i]
-    x_test.append(x_batch)
-    y_test.append(y_batch)
-
-x_test = np.concatenate(x_test)
-y_test = np.concatenate(y_test)
-
-print(f"Shape x_train {x_train.shape}")
-print(f"Shape y_train {y_train.shape}")
-print(f"Shape x_test {x_test.shape}")
-print(f"Shape y_test {y_test.shape}")
-
-# Data augmentation
-
-data_augmentation = keras.Sequential(
-    [
-        layers.Normalization(),
-        layers.Resizing(image_size, image_size),
-        layers.RandomFlip("horizontal"),
-        layers.RandomRotation(factor=0.02),
-        layers.RandomZoom(height_factor=0.2, width_factor=0.2),
-    ],
-    name="data_augmentation",
-)
-# Compute the mean and the variance of the training data for normalization.
-data_augmentation.layers[0].adapt(x_train)
-data_augmentation
 
 # MLP (Multilayer Perceptron)
 
@@ -174,9 +136,9 @@ class PatchEncoder(layers.Layer):
 def create_vit_classifier():
     inputs = keras.Input(shape=input_shape)
     # Augment data.
-    augmented = data_augmentation(inputs)
+    # augmented = data_augmentation(inputs)
     # Create patches.
-    patches = Patches(patch_size)(augmented)
+    patches = Patches(patch_size)(inputs)
     # Encode patches.
     encoded_patches = PatchEncoder(num_patches, projection_dim)(patches)
 
@@ -239,17 +201,21 @@ def run_experiment(model):
     )
     
     history = model.fit(
-        x=x_train,
-        y=y_train,
+        train_generator,
+        # steps_per_epoch=len(train_generator),
+        steps_per_epoch=10,
         batch_size=batch_size,
         epochs=num_epochs,
+        validation_data=test_generator,
+        # validation_steps=len(test_generator),
+        validation_steps=10,
         validation_split=0.1,
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, tensorboard_callback],
     )
 
     
     model.load_weights(checkpoint_filepath)
-    _, accuracy = model.evaluate(x_test, y_test)
+    _, accuracy = model.evaluate(test_generator)
     print(f"Test accuracy: {round(accuracy * 100, 2)}%")
 
     return history
@@ -267,8 +233,11 @@ def plot_history(item):
     plt.title("Train and Validation {} Over Epochs".format(item), fontsize=14)
     plt.legend()
     plt.grid()
-    plt.savefig(f'{item}.svg')
+    plt.savefig(f'{item}.png')
 
 plot_history("loss")
 plot_history("accuracy")
+
+
+print("\n\n  %s minutos" % ((time.time() - start_time) / 60 ))
 
