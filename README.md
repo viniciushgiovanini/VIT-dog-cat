@@ -75,6 +75,19 @@ export LD_LIBRARY_PATH=$(echo ${NVIDIA_DIR}/*/lib/ | sed -r 's/\s+/:/g')${LD_LIB
 python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 ```
 
+## Rodando Codigo do Pytorch na GPU
+
+- Instalar os pacotes do Pytorch
+
+```
+pip install torch torchvision
+```
+
+- Ter o cuda instalado igual do Tensorflow, e testar o codigo abaixo para saber se identifica a GPU
+
+```
+print(torch.cuda.is_available())
+```
 
 ## Linguagens de Desenvolvimento
 
