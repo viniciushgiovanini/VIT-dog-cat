@@ -3,7 +3,8 @@ import torch.nn as nn
 import torchvision.transforms as T
 from torch.optim import Adam
 import torchvision.models as models
-from torchvision.models.vision_transformer import ViT_L_32_Weights
+from transformers import ViTForImageClassification, ViTFeatureExtractor
+import torchvision
 
 import matplotlib.pyplot as plt
 
@@ -24,57 +25,43 @@ print ('Available devices ', torch.cuda.device_count())
 print ('Current cuda device ', torch.cuda.current_device())
 
 start_time = time.time()
-batch_size = 64
-
-
-# Prepare Data
-transform = T.Compose([
-    T.ToTensor(),
-    T.Resize((224, 224)),
-    T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-])
-
-train_data_path = '../VIT-dog-cat/data/dataset_treino_e_teste/train'
-test_data_path = '../VIT-dog-cat/data/dataset_treino_e_teste/test'
-
-train_dataset = ImageFolder(root=train_data_path, transform=transform)
-test_dataset = ImageFolder(root=test_data_path, transform=transform)
-
-# train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-# test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-
 # Hyperparameters
-num_epochs = 4
-# total_steps = len(train_loader)
-total_steps = 20
+batch_size = 24
+num_epochs = 10
+
+total_steps = 50
 learning_rate = 0.001
 
 
+# Prepare Data
+train_data_path = '../VIT-dog-cat/data/dataset_treino_e_teste/train'
+test_data_path = '../VIT-dog-cat/data/dataset_treino_e_teste/test'
 
-# Import pretrained model
-model = models.vit_l_32(weights=ViT_L_32_Weights.IMAGENET1K_V1)
+transform = T.Compose([
+    T.Resize((224, 224)),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
-in_features = model.heads[-1].in_features
-model.heads[-1] = nn.Linear(in_features, 1)
-model.sigmoid = nn.Sigmoid()
 
-# Freezing weights
-for name, param in model.named_parameters():
-    if name.startswith('head'):
-        param.requires_grad = True  
-    else:
-        param.requires_grad = False
-        
+# Carregar os dados de treinamento e teste
+train_dataset = torchvision.datasets.ImageFolder(root=train_data_path, transform=transform)
+test_dataset = torchvision.datasets.ImageFolder(root=test_data_path, transform=transform)
+
+num_classes = len(train_dataset.classes)
+model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224', num_labels=1, ignore_mismatched_sizes=True)
+
+
+criterion = torch.nn.BCEWithLogitsLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
 # Device CPU or GPU
-device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"\n\n Device ---> {device} and Current Device --> {torch.cuda.current_device()}\n\n")
 
 # Traning the model
 model.to(device)
-criterion = nn.BCEWithLogitsLoss()
-optimizer = Adam(model.parameters(), lr=learning_rate)
-
+print(model)
 
 # Loop traning
 train_losses = []
@@ -89,35 +76,42 @@ for epoch in range(num_epochs):
     running_loss = 0.0
     correct_train = 0
     total_train = 0
+    
+    loss_da_epoch = 0.0
+    accurracy_da_epoch = 0.0
 
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
+    # total_steps = len(train_loader)
     
     # Training
     model.train()
     for step, (images, labels) in enumerate(train_loader):
-        images, labels = images.to(device), labels.to(device)
-        optimizer.zero_grad()
-        outputs = model(images)
-        
-        loss = criterion(outputs, labels.float().unsqueeze(1))
-        loss.backward()
-        optimizer.step()
+      images, labels = images.to(device), labels.to(device)
+      optimizer.zero_grad()
 
-        running_loss += loss.item()
-        predicted = torch.round(torch.sigmoid(outputs))
-        correct_train += torch.sum(predicted == labels.unsqueeze(1)).item()
-        total_train += labels.size(0)
-        if step == total_steps:
-            print("----------------X------------------")
-            break
-        print(f'Epoch [{epoch+1}/{num_epochs}], Step [{step+1}/{total_steps}], Loss: {loss.item():.4f}, Accuracy: {correct_train/total_train:.4f}')
-        
-    train_loss = running_loss / len(train_loader)
-    train_accuracy = correct_train / total_train
-    train_losses.append(train_loss)
-    train_accuracies.append(train_accuracy)
+      outputs = model(images).logits 
+      loss = criterion(outputs, labels.float().unsqueeze(1))
+
+      loss.backward()
+      optimizer.step()
+
+      predicted = torch.round(torch.sigmoid(outputs))
+      correct_train = (predicted == labels.unsqueeze(1)).sum().item()
+      total_train = labels.size(0)
+      accuracy = correct_train / total_train
+
+      loss_da_epoch += loss.item()
+      accurracy_da_epoch += accuracy
+      train_losses.append(loss_da_epoch/ total_steps)
+      train_accuracies.append(accurracy_da_epoch/ total_steps)
+      
+      
+      print(f'Epoch [{epoch+1}/{num_epochs}], Step [{step+1}/{total_steps}], Loss: {loss.item():.4f}, Accuracy: {accuracy:.4f}')
+      if step == total_steps:
+              print("----------------X------------------")
+              break
 
     # Validation each 10 epoch
     # if (epoch + 1) % 2 == 0:
@@ -126,37 +120,39 @@ for epoch in range(num_epochs):
     correct_val = 0
     total_val = 0
     
+    loss_val_da_epoch = 0.0
+    accurracy_val_da_epoch = 0.0
+    
     print("Validation")
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     with torch.no_grad():
         for step, (images, labels) in enumerate(test_loader):
           images, labels = images.to(device), labels.to(device)
-          outputs = model(images)
 
+          outputs = model(images).logits
           loss = criterion(outputs, labels.float().unsqueeze(1))
-          running_val_loss += loss.item()
 
           predicted = torch.round(torch.sigmoid(outputs))
+          correct_val = (predicted == labels.unsqueeze(1)).sum().item()
+          total_val = labels.size(0)
+          accuracy_val = correct_val / total_val
 
-          correct_val += (predicted == labels.unsqueeze(1)).sum().item()
+          loss_val_da_epoch += loss.item()
+          accurracy_val_da_epoch += accuracy_val
 
-          total_val += labels.size(0)
-
+          print(f'Epoch [{epoch+1}/{num_epochs}], Step [{step+1}/{total_steps}], Loss Validation: {loss.item():.4f}, Accuracy Validation: {accuracy_val:.4f}')
           if step == total_steps:
               print("----------------X------------------")
               break
-          print(f'Epoch [{epoch+1}/{num_epochs}], Step [{step+1}/{len(test_loader)}], Loss Validation: {loss.item():.4f}, Accuracy Validation: {correct_val/total_val:.4f}')
 
-    val_loss = running_val_loss / len(test_loader)
-    val_accuracy = correct_val / total_val
-    val_losses.append(val_loss)
-    val_accuracies.append(val_accuracy)
+    val_losses.append(loss_val_da_epoch/ total_steps)
+    val_accuracies.append(accurracy_val_da_epoch/ total_steps)
+    print(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {loss_da_epoch/ total_steps:.4f}, Train Accuracy: {accurracy_da_epoch/ total_steps:.4f}, Validation Loss: {(loss_val_da_epoch/ total_steps):.4f}, Validation Accuracy: {accurracy_val_da_epoch/ total_steps:.4f}')
 
-    print(f'Epoch [{epoch+1}/{num_epochs}], Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}')
-    print("Tamanho das saídas:", outputs.size())
-    predicted = torch.round(torch.sigmoid(outputs))
-    print("Saídas binárias:", predicted)
-    print("Tamanho dos rótulos:", labels.size())
+    # print("Tamanho das saídas:", outputs.size())
+    # predicted = torch.round(torch.sigmoid(outputs))
+    # print("Saídas binárias:", predicted)
+    # print("Tamanho dos rótulos:", labels.size())
 
 
 torch.save(model.state_dict(), './models/modelo_vit_gpu.pth')
