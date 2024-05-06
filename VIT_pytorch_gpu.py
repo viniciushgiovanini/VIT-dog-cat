@@ -34,11 +34,11 @@ print ('Current cuda device ', torch.cuda.current_device())
 
 start_time = time.time()
 # Hyperparameters
-batch_size = 24
+batch_size = 32
 num_epochs = 10
 
 total_steps = 50
-learning_rate = 0.008
+learning_rate = 0.0001
 
 
 # Prepare Data
@@ -81,18 +81,21 @@ class Modelo(pl.LightningModule):
         
         # Substituir a última camada para um problema binário
         self.model.classifier = nn.Linear(self.model.config.hidden_size, 1)
+        self.sigmoid = nn.Sigmoid()
 
         # Função de perda
         self.criterion = nn.BCEWithLogitsLoss()
 
     def forward(self, x):
-        return self.model(x)
+        logits = self.model(x).logits
+        return logits
 
     def training_step(self, batch, batch_idx):
         images, labels = batch
-        outputs = self(images).logits
-        loss = self.criterion(outputs, labels.float().unsqueeze(1)) 
-        predicted = torch.round(torch.sigmoid(outputs))
+        logits = self(images)
+        probabilities = self.sigmoid(logits)
+        loss = self.criterion(logits, labels.float().unsqueeze(1)) 
+        predicted = torch.round(probabilities)
         accuracy = (predicted == labels.unsqueeze(1)).float().mean()
                 
         self.log('train_loss', loss, prog_bar=True)
@@ -101,15 +104,16 @@ class Modelo(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         images, labels = batch
-        outputs = self(images).logits 
-        loss = self.criterion(outputs, labels.float().unsqueeze(1)) 
-        predicted = torch.round(torch.sigmoid(outputs))
+        logits = self(images)
+        probabilities = self.sigmoid(logits)
+        loss = self.criterion(logits, labels.float().unsqueeze(1)) 
+        predicted = torch.round(probabilities)
         accuracy = (predicted == labels.unsqueeze(1)).float().mean()
         self.log('val_loss', loss, prog_bar=True)
         self.log('val_accuracy', accuracy, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
         return optimizer
 
 # Dados
@@ -127,6 +131,7 @@ csv_logger = CSVLogger(
 
 # Treinador
 trainer = pl.Trainer(max_epochs=num_epochs,  limit_train_batches= total_steps,limit_val_batches=total_steps, log_every_n_steps=1, logger=[csv_logger, TensorBoardLogger("./lightning_logs/")])
+# trainer = pl.Trainer(max_epochs=num_epochs, log_every_n_steps=1, logger=[csv_logger, TensorBoardLogger("./lightning_logs/")])
 
 # Treinamento
 trainer.fit(modelo, train_loader, val_loader)
