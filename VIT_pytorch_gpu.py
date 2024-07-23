@@ -42,8 +42,8 @@ learning_rate = 0.0001
 
 
 # Prepare Data
-train_data_path = '../VIT-dog-cat/data/dataset_treino_e_teste/train'
-test_data_path = '../VIT-dog-cat/data/dataset_treino_e_teste/test'
+train_data_path = '../VIT-dog-cat/data/dog_cat/dataset_treino_e_teste/train'
+test_data_path = '../VIT-dog-cat/data/dog_cat/dataset_treino_e_teste/test'
 
 transform = T.Compose([
     T.Resize((224, 224)),
@@ -80,7 +80,11 @@ class Modelo(pl.LightningModule):
             param.requires_grad = False
         
         # Substituir a última camada para um problema binário
-        self.model.classifier = nn.Linear(self.model.config.hidden_size, 1)
+        self.model.classifier = nn.Sequential(
+            nn.Linear(self.model.config.hidden_size, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1)
+        )
         self.sigmoid = nn.Sigmoid()
 
         # Função de perda
@@ -93,20 +97,20 @@ class Modelo(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         images, labels = batch
         logits = self(images)
-        probabilities = self.sigmoid(logits)
         loss = self.criterion(logits, labels.float().unsqueeze(1)) 
+        probabilities = self.sigmoid(logits)
         predicted = torch.round(probabilities)
         accuracy = (predicted == labels.unsqueeze(1)).float().mean()
                 
         self.log('train_loss', loss, prog_bar=True)
-        self.log("train_accuracy", accuracy, prog_bar=True)
+        self.log('train_accuracy', accuracy, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         images, labels = batch
         logits = self(images)
-        probabilities = self.sigmoid(logits)
         loss = self.criterion(logits, labels.float().unsqueeze(1)) 
+        probabilities = self.sigmoid(logits)
         predicted = torch.round(probabilities)
         accuracy = (predicted == labels.unsqueeze(1)).float().mean()
         self.log('val_loss', loss, prog_bar=True)
@@ -130,8 +134,7 @@ csv_logger = CSVLogger(
 )
 
 # Treinador
-trainer = pl.Trainer(max_epochs=num_epochs,  limit_train_batches= total_steps,limit_val_batches=total_steps, log_every_n_steps=1, logger=[csv_logger, TensorBoardLogger("./lightning_logs/")])
-# trainer = pl.Trainer(max_epochs=num_epochs, log_every_n_steps=1, logger=[csv_logger, TensorBoardLogger("./lightning_logs/")])
+trainer = pl.Trainer(max_epochs=num_epochs,  limit_train_batches= total_steps,limit_val_batches=total_steps, log_every_n_steps=1, logger=[csv_logger, TensorBoardLogger("./lightning_logs/")], accelerator="gpu", devices="auto")
 
 # Treinamento
 trainer.fit(modelo, train_loader, val_loader)
