@@ -18,6 +18,7 @@ import os
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import CSVLogger, TensorBoardLogger
+from torchvision.datasets import ImageFolder
 
 # Devce Data
 print('__Python VERSION:', sys.version)
@@ -37,13 +38,28 @@ start_time = time.time()
 batch_size = 32
 num_epochs = 10
 
-total_steps = 50
+
+
+
+# total_steps = 50
 learning_rate = 0.0001
 
 
 # Prepare Data
-train_data_path = '../VIT-dog-cat/data/dog_cat/dataset_treino_e_teste/train'
-test_data_path = '../VIT-dog-cat/data/dog_cat/dataset_treino_e_teste/test'
+train_data_path = '../VIT-dog-cat/data/pokemon/dataset_treino_e_teste/train'
+test_data_path = '../VIT-dog-cat/data/pokemon/dataset_treino_e_teste/test'
+
+# Carregar o dataset
+dataset = ImageFolder(root=train_data_path)
+
+# Obter o mapeamento de classes para índices
+class_to_idx = dataset.class_to_idx
+
+# Inverter o dicionário para mapear índices de volta para classes
+idx_to_class = {v: k for k, v in class_to_idx.items()}
+
+print("Class to Index Mapping:")
+print(class_to_idx)
 
 transform = T.Compose([
     T.Resize((224, 224)),
@@ -62,7 +78,10 @@ train_dataset = torchvision.datasets.ImageFolder(root=train_data_path, transform
 test_dataset = torchvision.datasets.ImageFolder(root=test_data_path, transform=transform)
 
 num_classes = len(train_dataset.classes)
-model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224', num_labels=1, ignore_mismatched_sizes=True)
+
+
+# Calcular o número de batches por época
+total_steps = len(train_dataset) // batch_size
 
 
 # Device CPU or GPU
@@ -73,8 +92,9 @@ class Modelo(pl.LightningModule):
     def __init__(self):
         super(Modelo, self).__init__()
         # Carregar um modelo pré-treinado
-        self.model = model
-        
+        self.model =  ViTForImageClassification.from_pretrained('google/vit-base-patch16-224', num_labels=1, ignore_mismatched_sizes=True)
+        print(self.model)
+        print("----------------------------------------------------------------")
         # Congelar os pesos das camadas pré-treinadas
         for param in self.model.parameters():
             param.requires_grad = False
@@ -89,6 +109,10 @@ class Modelo(pl.LightningModule):
 
         # Função de perda
         self.criterion = nn.BCEWithLogitsLoss()
+        print(self.model)
+        print("----------------------------------------------------------------")
+        # for name, module in self.model.named_modules():
+        #   print(f"{name}: {module}")
 
     def forward(self, x):
         logits = self.model(x).logits
